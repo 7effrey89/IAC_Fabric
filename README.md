@@ -2,6 +2,14 @@
 
 This repository provides Infrastructure as Code (IaC) solutions for deploying Microsoft Fabric assets using GitHub Actions.
 
+## 📚 Documentation
+
+- **[Quick Start Guide](QUICKSTART.md)** - Get started in 5 minutes
+- **[Architecture Overview](ARCHITECTURE.md)** - System design and flow diagrams
+- **[Troubleshooting Guide](TROUBLESHOOTING.md)** - Common issues and solutions
+- **[Contributing Guide](CONTRIBUTING.md)** - How to contribute
+- **[Scripts Documentation](scripts/README.md)** - Detailed script usage
+
 ## Features
 
 - 🚀 Automated deployment of Microsoft Fabric workspaces
