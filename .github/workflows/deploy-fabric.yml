@@ -93,7 +93,20 @@ jobs:
         if: github.event_name == 'push'
         shell: pwsh
         run: |
-          $config = Get-Content -Path ./config/parameters.json | ConvertFrom-Json
+          # Validate config file exists
+          if (-not (Test-Path ./config/parameters.json)) {
+            Write-Error "Configuration file not found: ./config/parameters.json"
+            exit 1
+          }
+          
+          try {
+            $config = Get-Content -Path ./config/parameters.json | ConvertFrom-Json
+          }
+          catch {
+            Write-Error "Failed to parse configuration file: $_"
+            exit 1
+          }
+          
           echo "TENANT_ID=$($config.tenantId)" >> $env:GITHUB_OUTPUT
           echo "WORKSPACE_NAME=$($config.workspaceName)" >> $env:GITHUB_OUTPUT
           echo "WORKSPACE_DESC=$($config.workspaceDescription)" >> $env:GITHUB_OUTPUT

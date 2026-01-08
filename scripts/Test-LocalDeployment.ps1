@@ -67,8 +67,21 @@ Write-Host ""
 
 # Step 3: Load configuration
 Write-Host "Step 3: Loading configuration..."
-$resolvedPath = Resolve-Path $ConfigPath
-$config = Get-Content -Path $resolvedPath -Raw | ConvertFrom-Json
+
+# Check if config file exists
+if (-not (Test-Path $ConfigPath)) {
+    Write-Error "Configuration file not found: $ConfigPath"
+    exit 1
+}
+
+try {
+    $resolvedPath = Resolve-Path $ConfigPath
+    $config = Get-Content -Path $resolvedPath -Raw | ConvertFrom-Json
+}
+catch {
+    Write-Error "Failed to load configuration: $_"
+    exit 1
+}
 
 Write-Host "Configuration loaded from: $resolvedPath"
 Write-Host "  Tenant ID: $($config.tenantId)"

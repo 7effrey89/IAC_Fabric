@@ -135,7 +135,8 @@ function Add-WorkspaceAdmin {
     param (
         [string]$WorkspaceId,
         [string]$UserEmail,
-        [string]$AccessToken
+        [string]$AccessToken,
+        [string]$GraphToken
     )
 
     Write-Host "Adding admin user: $UserEmail to workspace"
@@ -145,10 +146,9 @@ function Add-WorkspaceAdmin {
         "Content-Type"  = "application/json"
     }
 
-    # Get user principal using Microsoft Graph API
-    $graphToken = (Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com").Token
+    # Use provided Graph token
     $graphHeaders = @{
-        "Authorization" = "Bearer $graphToken"
+        "Authorization" = "Bearer $GraphToken"
         "Content-Type"  = "application/json"
     }
 
@@ -249,6 +249,20 @@ function New-FabricSqlMirror {
         "Content-Type"  = "application/json"
     }
 
+    # Create the definition payload and encode it to base64
+    $definitionPayload = @{
+        name        = $Name
+        source      = @{
+            type                = "AzureSQLDatabase"
+            serverName          = $ServerName
+            databaseName        = $DatabaseName
+            connectionString    = $ConnectionString
+        }
+    } | ConvertTo-Json -Depth 10
+    
+    # Encode to base64 as required by InlineBase64 payload type
+    $base64Payload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($definitionPayload))
+
     $body = @{
         displayName = $Name
         type        = "SQLEndpoint"
@@ -256,15 +270,7 @@ function New-FabricSqlMirror {
             parts = @(
                 @{
                     path        = "mirroredDatabase.json"
-                    payload     = @{
-                        name        = $Name
-                        source      = @{
-                            type                = "AzureSQLDatabase"
-                            serverName          = $ServerName
-                            databaseName        = $DatabaseName
-                            connectionString    = $ConnectionString
-                        }
-                    } | ConvertTo-Json -Depth 10
+                    payload     = $base64Payload
                     payloadType = "InlineBase64"
                 }
             )
@@ -294,13 +300,24 @@ try {
     # Get access token
     $accessToken = Get-FabricAccessToken
 
+    # Get Graph token once for reuse if needed
+    $graphToken = $null
+    if ($AdminUserEmail) {
+        try {
+            $graphToken = (Get-AzAccessToken -ResourceUrl "https://graph.microsoft.com").Token
+        }
+        catch {
+            Write-Warning "Failed to get Graph API token. Admin user will not be added."
+        }
+    }
+
     # Create workspace
     $workspace = New-FabricWorkspace -Name $WorkspaceName -Description $WorkspaceDescription -AccessToken $accessToken
     $workspaceId = $workspace.id
 
     # Add admin user if specified
-    if ($AdminUserEmail) {
-        Add-WorkspaceAdmin -WorkspaceId $workspaceId -UserEmail $AdminUserEmail -AccessToken $accessToken
+    if ($AdminUserEmail -and $graphToken) {
+        Add-WorkspaceAdmin -WorkspaceId $workspaceId -UserEmail $AdminUserEmail -AccessToken $accessToken -GraphToken $graphToken
     }
 
     # Create lakehouse if specified
