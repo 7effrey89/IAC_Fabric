@@ -1,0 +1,48 @@
+# Secrets and credentials
+*.secret
+*.key
+*.pem
+*.pfx
+
+# Configuration files with sensitive data
+config/parameters.json
+# But allow example configs
+!config/parameters.example.json
+!config/parameters.*.json
+
+# PowerShell
+*.ps1xml
+*.psd1
+*.psm1
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Azure
+.azure/
+
+# Node modules (if using JS tooling)
+node_modules/
+
+# Python (if using Python tooling)
+__pycache__/
+*.py[cod]
+venv/
+.env

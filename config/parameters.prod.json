@@ -1,0 +1,14 @@
+{
+  "tenantId": "YOUR_PROD_TENANT_ID",
+  "workspaceName": "Prod-Fabric-Workspace",
+  "workspaceDescription": "Production workspace",
+  "adminUserEmail": "prod-admin@example.com",
+  "lakehouseName": "ProdLakehouse",
+  "dataAgentName": "ProdDataAgent",
+  "sqlMirror": {
+    "name": "ProdSQLMirror",
+    "serverName": "prod-server.database.windows.net",
+    "databaseName": "ProdDB",
+    "connectionString": ""
+  }
+}

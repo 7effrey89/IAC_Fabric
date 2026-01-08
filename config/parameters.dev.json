@@ -1,0 +1,14 @@
+{
+  "tenantId": "YOUR_DEV_TENANT_ID",
+  "workspaceName": "Dev-Fabric-Workspace",
+  "workspaceDescription": "Development workspace for testing",
+  "adminUserEmail": "dev-admin@example.com",
+  "lakehouseName": "DevLakehouse",
+  "dataAgentName": "",
+  "sqlMirror": {
+    "name": "",
+    "serverName": "",
+    "databaseName": "",
+    "connectionString": ""
+  }
+}
