@@ -15,8 +15,18 @@
     "name": "ProdCopyJob",
     "sourceServer": "prod-server.database.windows.net",
     "sourceDatabase": "ProdDB",
-    "sourceTable": "Transactions",
+    "sourceSchema": "dbo",
+    "sourceTables": [
+      "Transactions",
+      "Orders"
+    ],
     "destinationLakehouse": "ProdLakehouse",
-    "destinationTable": "Transactions"
+    "incrementalColumn": "ModifiedDate",
+    "servicePrincipal": {
+      "tenant": "",
+      "clientId": "",
+      "secret": ""
+    },
+    "scheduleIntervalHours": 24
   }
 }

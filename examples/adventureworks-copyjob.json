@@ -1,0 +1,40 @@
+{
+  "tenantId": "12345678-1234-1234-1234-123456789abc",
+  "workspaceName": "AdventureWorks-Workspace",
+  "workspaceDescription": "Workspace for AdventureWorks data ingestion from SQL Server to Lakehouse",
+  "adminUserEmail": "data-engineer@example.com",
+  "lakehouseName": "Bronze",
+  "dataAgentName": "",
+  "sqlMirror": {
+    "name": "",
+    "serverName": "",
+    "databaseName": "",
+    "connectionString": ""
+  },
+  "copyJob": {
+    "name": "SalesLT_IncrementalCopy",
+    "sourceServer": "customer001fm.database.windows.net",
+    "sourceDatabase": "customer001_adventureworks",
+    "sourceSchema": "SalesLT",
+    "sourceTables": [
+      "Address",
+      "Customer",
+      "CustomerAddress",
+      "Product",
+      "ProductCategory",
+      "ProductDescription",
+      "ProductModel",
+      "ProductModelProductDescription",
+      "SalesOrderDetail",
+      "SalesOrderHeader"
+    ],
+    "destinationLakehouse": "Bronze",
+    "incrementalColumn": "ModifiedDate",
+    "servicePrincipal": {
+      "tenant": "17f09016-a816-4431-9f38-bad17d60afaf",
+      "clientId": "f949d916-6e66-40ba-9549-a1b3f18e0b5f",
+      "secret": ""
+    },
+    "scheduleIntervalHours": 24
+  }
+}

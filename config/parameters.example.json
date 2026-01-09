@@ -15,8 +15,19 @@
     "name": "SQLToLakehouseCopy",
     "sourceServer": "myserver.database.windows.net",
     "sourceDatabase": "ProductionDB",
-    "sourceTable": "Sales",
+    "sourceSchema": "dbo",
+    "sourceTables": [
+      "Sales",
+      "Customers",
+      "Products"
+    ],
     "destinationLakehouse": "ProductionLakehouse",
-    "destinationTable": "Sales"
+    "incrementalColumn": "ModifiedDate",
+    "servicePrincipal": {
+      "tenant": "",
+      "clientId": "",
+      "secret": ""
+    },
+    "scheduleIntervalHours": 24
   }
 }

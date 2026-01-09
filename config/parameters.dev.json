@@ -15,8 +15,15 @@
     "name": "",
     "sourceServer": "",
     "sourceDatabase": "",
-    "sourceTable": "",
+    "sourceSchema": "",
+    "sourceTables": [],
     "destinationLakehouse": "",
-    "destinationTable": ""
+    "incrementalColumn": "",
+    "servicePrincipal": {
+      "tenant": "",
+      "clientId": "",
+      "secret": ""
+    },
+    "scheduleIntervalHours": 24
   }
 }

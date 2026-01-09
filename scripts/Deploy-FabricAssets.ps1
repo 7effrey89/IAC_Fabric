@@ -45,20 +45,35 @@
 .PARAMETER CopyJobSourceDatabase
     Database name for the copy job source (required if creating copy job)
 
-.PARAMETER CopyJobSourceTable
-    Table name to copy from Azure SQL (required if creating copy job)
+.PARAMETER CopyJobSourceSchema
+    Schema name for tables to copy (e.g., 'SalesLT') (required if creating copy job)
+
+.PARAMETER CopyJobSourceTables
+    Array of table names to copy from Azure SQL (required if creating copy job)
 
 .PARAMETER CopyJobDestinationLakehouse
     Destination lakehouse name for the copy job (required if creating copy job)
 
-.PARAMETER CopyJobDestinationTable
-    Destination table name in the lakehouse (required if creating copy job)
+.PARAMETER CopyJobIncrementalColumn
+    Column name for incremental load (e.g., 'ModifiedDate') (optional)
+
+.PARAMETER CopyJobServicePrincipalTenant
+    Service principal tenant ID for authentication (required if creating copy job)
+
+.PARAMETER CopyJobServicePrincipalClientId
+    Service principal client ID for authentication (required if creating copy job)
+
+.PARAMETER CopyJobServicePrincipalSecret
+    Service principal secret for authentication (required if creating copy job)
+
+.PARAMETER CopyJobScheduleIntervalHours
+    Schedule interval in hours for copy job execution (default: 24)
 
 .EXAMPLE
     ./Deploy-FabricAssets.ps1 -TenantId "xxx" -WorkspaceName "MyWorkspace" -LakehouseName "MyLakehouse"
 
 .EXAMPLE
-    ./Deploy-FabricAssets.ps1 -TenantId "xxx" -WorkspaceName "MyWorkspace" -LakehouseName "MyLakehouse" -CopyJobName "SQLToCopyJob" -CopyJobSourceServer "server.database.windows.net" -CopyJobSourceDatabase "MyDB" -CopyJobSourceTable "Customers" -CopyJobDestinationLakehouse "MyLakehouse" -CopyJobDestinationTable "Customers"
+    ./Deploy-FabricAssets.ps1 -TenantId "xxx" -WorkspaceName "MyWorkspace" -LakehouseName "Bronze" -CopyJobName "SalesLTCopyJob" -CopyJobSourceServer "customer001fm.database.windows.net" -CopyJobSourceDatabase "customer001_adventureworks" -CopyJobSourceSchema "SalesLT" -CopyJobSourceTables @("Address","Customer","CustomerAddress") -CopyJobDestinationLakehouse "Bronze" -CopyJobIncrementalColumn "ModifiedDate" -CopyJobServicePrincipalTenant "xxx" -CopyJobServicePrincipalClientId "xxx" -CopyJobServicePrincipalSecret "xxx" -CopyJobScheduleIntervalHours 24
 #>
 
 [CmdletBinding()]
@@ -103,13 +118,28 @@ param (
     [string]$CopyJobSourceDatabase = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$CopyJobSourceTable = "",
+    [string]$CopyJobSourceSchema = "",
+
+    [Parameter(Mandatory = $false)]
+    [string[]]$CopyJobSourceTables = @(),
 
     [Parameter(Mandatory = $false)]
     [string]$CopyJobDestinationLakehouse = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$CopyJobDestinationTable = ""
+    [string]$CopyJobIncrementalColumn = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobServicePrincipalTenant = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobServicePrincipalClientId = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobServicePrincipalSecret = "",
+
+    [Parameter(Mandatory = $false)]
+    [int]$CopyJobScheduleIntervalHours = 24
 )
 
 # Set error action preference
@@ -336,87 +366,226 @@ function New-FabricCopyJob {
         [string]$Name,
         [string]$SourceServer,
         [string]$SourceDatabase,
-        [string]$SourceTable,
+        [string]$SourceSchema,
+        [string[]]$SourceTables,
         [string]$DestinationLakehouse,
-        [string]$DestinationTable,
-        [string]$ConnectionString,
+        [string]$IncrementalColumn,
+        [string]$ServicePrincipalTenant,
+        [string]$ServicePrincipalClientId,
+        [string]$ServicePrincipalSecret,
+        [int]$ScheduleIntervalHours,
         [string]$AccessToken
     )
 
     Write-Host "Creating Copy Job (Data Pipeline): $Name"
+    Write-Host "  Source: $SourceServer.$SourceDatabase.$SourceSchema"
+    Write-Host "  Tables: $($SourceTables -join ', ')"
+    Write-Host "  Destination: Lakehouse '$DestinationLakehouse'"
+    if ($IncrementalColumn) {
+        Write-Host "  Incremental Load: Using column '$IncrementalColumn'"
+    }
+    Write-Host "  Schedule: Every $ScheduleIntervalHours hours"
 
     $headers = @{
         "Authorization" = "Bearer $AccessToken"
         "Content-Type"  = "application/json"
     }
 
-    # Create a data pipeline with copy activity
-    # The pipeline definition includes source (Azure SQL) and sink (Lakehouse)
-    $pipelineDefinition = @{
-        name = $Name
-        properties = @{
-            activities = @(
-                @{
-                    name = "CopyFromSQLToLakehouse"
-                    type = "Copy"
-                    inputs = @(
-                        @{
-                            referenceName = "AzureSqlSource"
-                            type = "DatasetReference"
-                        }
-                    )
-                    outputs = @(
-                        @{
-                            referenceName = "LakehouseDestination"
-                            type = "DatasetReference"
-                        }
-                    )
-                    typeProperties = @{
-                        source = @{
-                            type = "AzureSqlSource"
-                            sqlReaderQuery = "SELECT * FROM [$SourceTable]"
-                        }
-                        sink = @{
-                            type = "LakehouseTableSink"
-                            tableName = $DestinationTable
-                        }
-                        enableStaging = $false
+    # Build connection string with service principal authentication
+    $connectionString = "Data Source=$SourceServer;Initial Catalog=$SourceDatabase;Authentication=Active Directory Service Principal;User Id=$ServicePrincipalClientId@$ServicePrincipalTenant;Password=$ServicePrincipalSecret;Encrypt=True;"
+
+    # Create activities for each table
+    $activities = @()
+    $datasets = @{}
+    
+    foreach ($table in $SourceTables) {
+        $fullTableName = "$SourceSchema.$table"
+        $sanitizedName = $table -replace '[^a-zA-Z0-9]', '_'
+        
+        # Create copy activity for this table
+        $copyActivity = @{
+            name = "Copy_$sanitizedName"
+            type = "Copy"
+            dependsOn = @()
+            policy = @{
+                timeout = "0.12:00:00"
+                retry = 3
+                retryIntervalInSeconds = 30
+            }
+            userProperties = @()
+            typeProperties = @{
+                source = @{
+                    type = "AzureSqlSource"
+                    queryTimeout = "02:00:00"
+                    partitionOption = "None"
+                }
+                sink = @{
+                    type = "LakehouseTableSink"
+                    tableActionOption = "Append"
+                    writeBehavior = "Insert"
+                }
+                enableStaging = $false
+                translator = @{
+                    type = "TabularTranslator"
+                    typeConversion = $true
+                    typeConversionSettings = @{
+                        allowDataTruncation = $true
+                        treatBooleanAsNumber = $false
                     }
                 }
+            }
+            inputs = @(
+                @{
+                    referenceName = "AzureSqlTable_$sanitizedName"
+                    type = "DatasetReference"
+                }
             )
-            parameters = @{}
+            outputs = @(
+                @{
+                    referenceName = "LakehouseTable_$sanitizedName"
+                    type = "DatasetReference"
+                }
+            )
         }
-        datasets = @{
-            AzureSqlSource = @{
-                type = "AzureSqlTable"
+        
+        # Add incremental load if specified
+        if ($IncrementalColumn) {
+            $copyActivity.typeProperties.source.sqlReaderQuery = "SELECT * FROM [$fullTableName] WHERE [$IncrementalColumn] > '@{pipeline().parameters.windowStart}' AND [$IncrementalColumn] <= '@{pipeline().parameters.windowEnd}'"
+        }
+        else {
+            $copyActivity.typeProperties.source.sqlReaderQuery = "SELECT * FROM [$fullTableName]"
+        }
+        
+        $activities += $copyActivity
+        
+        # Create source dataset
+        $datasets["AzureSqlTable_$sanitizedName"] = @{
+            name = "AzureSqlTable_$sanitizedName"
+            properties = @{
                 linkedServiceName = @{
                     referenceName = "AzureSqlDatabase"
                     type = "LinkedServiceReference"
                 }
+                annotations = @()
+                type = "AzureSqlTable"
+                schema = @()
                 typeProperties = @{
-                    tableName = $SourceTable
-                }
-            }
-            LakehouseDestination = @{
-                type = "LakehouseTable"
-                typeProperties = @{
-                    lakehouse = $DestinationLakehouse
-                    table = $DestinationTable
+                    schema = $SourceSchema
+                    table = $table
                 }
             }
         }
-        linkedServices = @{
-            AzureSqlDatabase = @{
+        
+        # Create destination dataset
+        $datasets["LakehouseTable_$sanitizedName"] = @{
+            name = "LakehouseTable_$sanitizedName"
+            properties = @{
+                linkedServiceName = @{
+                    referenceName = "Lakehouse_$DestinationLakehouse"
+                    type = "LinkedServiceReference"
+                }
+                annotations = @()
+                type = "LakehouseTable"
+                schema = @()
+                typeProperties = @{
+                    table = $table
+                }
+            }
+        }
+    }
+
+    # Pipeline parameters for incremental load
+    $pipelineParameters = @{}
+    if ($IncrementalColumn) {
+        $pipelineParameters = @{
+            windowStart = @{
+                type = "String"
+                defaultValue = "1900-01-01T00:00:00Z"
+            }
+            windowEnd = @{
+                type = "String"
+                defaultValue = "@{utcnow()}"
+            }
+        }
+    }
+
+    # Create the pipeline definition
+    $pipelineDefinition = @{
+        name = $Name
+        properties = @{
+            activities = $activities
+            parameters = $pipelineParameters
+            annotations = @()
+            lastPublishTime = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+        }
+    }
+
+    # Create linked services
+    $linkedServices = @{
+        AzureSqlDatabase = @{
+            name = "AzureSqlDatabase"
+            properties = @{
+                annotations = @()
                 type = "AzureSqlDatabase"
                 typeProperties = @{
-                    connectionString = $ConnectionString
+                    connectionString = $connectionString
                 }
             }
         }
-    } | ConvertTo-Json -Depth 20
+        "Lakehouse_$DestinationLakehouse" = @{
+            name = "Lakehouse_$DestinationLakehouse"
+            properties = @{
+                annotations = @()
+                type = "Lakehouse"
+                typeProperties = @{
+                    workspaceId = $WorkspaceId
+                    artifactId = $DestinationLakehouse
+                }
+            }
+        }
+    }
+
+    # Create the complete package
+    $packageDefinition = @{
+        pipeline = $pipelineDefinition
+        datasets = $datasets.Values
+        linkedServices = $linkedServices.Values
+    }
+
+    # Add trigger for scheduling
+    if ($ScheduleIntervalHours -gt 0) {
+        $trigger = @{
+            name = "${Name}_Trigger"
+            properties = @{
+                annotations = @()
+                runtimeState = "Started"
+                pipelines = @(
+                    @{
+                        pipelineReference = @{
+                            referenceName = $Name
+                            type = "PipelineReference"
+                        }
+                        parameters = @{}
+                    }
+                )
+                type = "ScheduleTrigger"
+                typeProperties = @{
+                    recurrence = @{
+                        frequency = "Hour"
+                        interval = $ScheduleIntervalHours
+                        startTime = (Get-Date).ToString("yyyy-MM-ddTHH:mm:ss.fffZ")
+                        timeZone = "UTC"
+                    }
+                }
+            }
+        }
+        $packageDefinition.trigger = $trigger
+    }
+
+    $definitionJson = $packageDefinition | ConvertTo-Json -Depth 20
     
     # Encode to base64 as required by InlineBase64 payload type
-    $base64Payload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($pipelineDefinition))
+    $base64Payload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($definitionJson))
 
     $body = @{
         displayName = $Name
@@ -436,8 +605,9 @@ function New-FabricCopyJob {
     
     try {
         $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json -Depth 10)
-        Write-Host "Copy Job (Data Pipeline) created successfully. ID: $($response.id)"
-        Write-Host "Pipeline: Copy data from $SourceServer.$SourceDatabase.$SourceTable to Lakehouse $DestinationLakehouse.$DestinationTable"
+        Write-Host "✓ Copy Job (Data Pipeline) created successfully. ID: $($response.id)"
+        Write-Host "  Pipeline will copy $($SourceTables.Count) table(s) from $SourceServer.$SourceDatabase"
+        Write-Host "  to Lakehouse '$DestinationLakehouse' every $ScheduleIntervalHours hours"
         return $response
     }
     catch {
@@ -499,15 +669,21 @@ try {
     }
 
     # Create copy job if specified
-    if ($CopyJobName -and $CopyJobSourceServer -and $CopyJobSourceDatabase -and $CopyJobSourceTable -and $CopyJobDestinationLakehouse -and $CopyJobDestinationTable) {
-        if (-not $SqlConnectionString) {
-            Write-Warning "SQL Connection String not provided. Skipping Copy Job creation."
+    if ($CopyJobName -and $CopyJobSourceServer -and $CopyJobSourceDatabase -and $CopyJobSourceSchema -and $CopyJobSourceTables.Count -gt 0 -and $CopyJobDestinationLakehouse) {
+        if (-not $CopyJobServicePrincipalTenant -or -not $CopyJobServicePrincipalClientId -or -not $CopyJobServicePrincipalSecret) {
+            Write-Warning "Service Principal credentials not provided. Skipping Copy Job creation."
+            Write-Warning "Required: CopyJobServicePrincipalTenant, CopyJobServicePrincipalClientId, CopyJobServicePrincipalSecret"
         }
         else {
             New-FabricCopyJob -WorkspaceId $workspaceId -Name $CopyJobName `
                 -SourceServer $CopyJobSourceServer -SourceDatabase $CopyJobSourceDatabase `
-                -SourceTable $CopyJobSourceTable -DestinationLakehouse $CopyJobDestinationLakehouse `
-                -DestinationTable $CopyJobDestinationTable -ConnectionString $SqlConnectionString `
+                -SourceSchema $CopyJobSourceSchema -SourceTables $CopyJobSourceTables `
+                -DestinationLakehouse $CopyJobDestinationLakehouse `
+                -IncrementalColumn $CopyJobIncrementalColumn `
+                -ServicePrincipalTenant $CopyJobServicePrincipalTenant `
+                -ServicePrincipalClientId $CopyJobServicePrincipalClientId `
+                -ServicePrincipalSecret $CopyJobServicePrincipalSecret `
+                -ScheduleIntervalHours $CopyJobScheduleIntervalHours `
                 -AccessToken $accessToken
         }
     }

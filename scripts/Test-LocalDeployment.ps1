@@ -114,8 +114,13 @@ if ($DryRun) {
     
     if ($config.copyJob.name) {
         Write-Host "  6. Create copy job: $($config.copyJob.name)"
-        Write-Host "     Source: $($config.copyJob.sourceServer).$($config.copyJob.sourceDatabase).$($config.copyJob.sourceTable)"
-        Write-Host "     Destination: $($config.copyJob.destinationLakehouse).$($config.copyJob.destinationTable)"
+        Write-Host "     Source: $($config.copyJob.sourceServer).$($config.copyJob.sourceDatabase).$($config.copyJob.sourceSchema)"
+        Write-Host "     Tables: $($config.copyJob.sourceTables -join ', ')"
+        Write-Host "     Destination: Lakehouse '$($config.copyJob.destinationLakehouse)'"
+        if ($config.copyJob.incrementalColumn) {
+            Write-Host "     Incremental: Column '$($config.copyJob.incrementalColumn)'"
+        }
+        Write-Host "     Schedule: Every $($config.copyJob.scheduleIntervalHours) hours"
     }
     
     Write-Host ""
@@ -164,14 +169,29 @@ else {
     if ($config.copyJob.sourceDatabase) {
         $params.CopyJobSourceDatabase = $config.copyJob.sourceDatabase
     }
-    if ($config.copyJob.sourceTable) {
-        $params.CopyJobSourceTable = $config.copyJob.sourceTable
+    if ($config.copyJob.sourceSchema) {
+        $params.CopyJobSourceSchema = $config.copyJob.sourceSchema
+    }
+    if ($config.copyJob.sourceTables -and $config.copyJob.sourceTables.Count -gt 0) {
+        $params.CopyJobSourceTables = $config.copyJob.sourceTables
     }
     if ($config.copyJob.destinationLakehouse) {
         $params.CopyJobDestinationLakehouse = $config.copyJob.destinationLakehouse
     }
-    if ($config.copyJob.destinationTable) {
-        $params.CopyJobDestinationTable = $config.copyJob.destinationTable
+    if ($config.copyJob.incrementalColumn) {
+        $params.CopyJobIncrementalColumn = $config.copyJob.incrementalColumn
+    }
+    if ($config.copyJob.servicePrincipal.tenant) {
+        $params.CopyJobServicePrincipalTenant = $config.copyJob.servicePrincipal.tenant
+    }
+    if ($config.copyJob.servicePrincipal.clientId) {
+        $params.CopyJobServicePrincipalClientId = $config.copyJob.servicePrincipal.clientId
+    }
+    if ($config.copyJob.servicePrincipal.secret) {
+        $params.CopyJobServicePrincipalSecret = $config.copyJob.servicePrincipal.secret
+    }
+    if ($config.copyJob.scheduleIntervalHours) {
+        $params.CopyJobScheduleIntervalHours = $config.copyJob.scheduleIntervalHours
     }
     
     # Execute deployment script
