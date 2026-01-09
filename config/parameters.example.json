@@ -10,5 +10,13 @@
     "serverName": "myserver.database.windows.net",
     "databaseName": "ProductionDB",
     "connectionString": "Server=myserver.database.windows.net;Database=ProductionDB;User Id=xxx;Password=xxx;"
+  },
+  "copyJob": {
+    "name": "SQLToLakehouseCopy",
+    "sourceServer": "myserver.database.windows.net",
+    "sourceDatabase": "ProductionDB",
+    "sourceTable": "Sales",
+    "destinationLakehouse": "ProductionLakehouse",
+    "destinationTable": "Sales"
   }
 }

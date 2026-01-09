@@ -10,5 +10,13 @@
     "serverName": "prod-server.database.windows.net",
     "databaseName": "ProdDB",
     "connectionString": ""
+  },
+  "copyJob": {
+    "name": "ProdCopyJob",
+    "sourceServer": "prod-server.database.windows.net",
+    "sourceDatabase": "ProdDB",
+    "sourceTable": "Transactions",
+    "destinationLakehouse": "ProdLakehouse",
+    "destinationTable": "Transactions"
   }
 }

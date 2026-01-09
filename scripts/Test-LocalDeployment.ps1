@@ -112,6 +112,12 @@ if ($DryRun) {
         Write-Host "  5. Create SQL mirror: $($config.sqlMirror.name)"
     }
     
+    if ($config.copyJob.name) {
+        Write-Host "  6. Create copy job: $($config.copyJob.name)"
+        Write-Host "     Source: $($config.copyJob.sourceServer).$($config.copyJob.sourceDatabase).$($config.copyJob.sourceTable)"
+        Write-Host "     Destination: $($config.copyJob.destinationLakehouse).$($config.copyJob.destinationTable)"
+    }
+    
     Write-Host ""
     Write-Host "✓ Dry run completed successfully" -ForegroundColor Green
 }
@@ -148,6 +154,24 @@ else {
     }
     if ($config.sqlMirror.connectionString) { 
         $params.SqlConnectionString = $config.sqlMirror.connectionString 
+    }
+    if ($config.copyJob.name) {
+        $params.CopyJobName = $config.copyJob.name
+    }
+    if ($config.copyJob.sourceServer) {
+        $params.CopyJobSourceServer = $config.copyJob.sourceServer
+    }
+    if ($config.copyJob.sourceDatabase) {
+        $params.CopyJobSourceDatabase = $config.copyJob.sourceDatabase
+    }
+    if ($config.copyJob.sourceTable) {
+        $params.CopyJobSourceTable = $config.copyJob.sourceTable
+    }
+    if ($config.copyJob.destinationLakehouse) {
+        $params.CopyJobDestinationLakehouse = $config.copyJob.destinationLakehouse
+    }
+    if ($config.copyJob.destinationTable) {
+        $params.CopyJobDestinationTable = $config.copyJob.destinationTable
     }
     
     # Execute deployment script

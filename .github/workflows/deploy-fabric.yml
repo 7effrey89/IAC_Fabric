@@ -40,6 +40,30 @@ on:
         description: 'SQL Database Name (optional)'
         required: false
         type: string
+      copy_job_name:
+        description: 'Copy Job Name (optional)'
+        required: false
+        type: string
+      copy_job_source_server:
+        description: 'Copy Job Source Server (optional)'
+        required: false
+        type: string
+      copy_job_source_database:
+        description: 'Copy Job Source Database (optional)'
+        required: false
+        type: string
+      copy_job_source_table:
+        description: 'Copy Job Source Table (optional)'
+        required: false
+        type: string
+      copy_job_destination_lakehouse:
+        description: 'Copy Job Destination Lakehouse (optional)'
+        required: false
+        type: string
+      copy_job_destination_table:
+        description: 'Copy Job Destination Table (optional)'
+        required: false
+        type: string
   push:
     branches:
       - main
@@ -116,6 +140,12 @@ jobs:
           echo "SQL_MIRROR_NAME=$($config.sqlMirror.name)" >> $env:GITHUB_OUTPUT
           echo "SQL_SERVER=$($config.sqlMirror.serverName)" >> $env:GITHUB_OUTPUT
           echo "SQL_DATABASE=$($config.sqlMirror.databaseName)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_NAME=$($config.copyJob.name)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_SERVER=$($config.copyJob.sourceServer)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_DATABASE=$($config.copyJob.sourceDatabase)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_TABLE=$($config.copyJob.sourceTable)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_DEST_LAKEHOUSE=$($config.copyJob.destinationLakehouse)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_DEST_TABLE=$($config.copyJob.destinationTable)" >> $env:GITHUB_OUTPUT
 
       - name: Deploy Fabric Assets
         shell: pwsh
@@ -133,6 +163,12 @@ jobs:
             $sqlMirrorName = "${{ inputs.sql_mirror_name }}"
             $sqlServer = "${{ inputs.sql_server_name }}"
             $sqlDatabase = "${{ inputs.sql_database_name }}"
+            $copyJobName = "${{ inputs.copy_job_name }}"
+            $copyJobSourceServer = "${{ inputs.copy_job_source_server }}"
+            $copyJobSourceDatabase = "${{ inputs.copy_job_source_database }}"
+            $copyJobSourceTable = "${{ inputs.copy_job_source_table }}"
+            $copyJobDestLakehouse = "${{ inputs.copy_job_destination_lakehouse }}"
+            $copyJobDestTable = "${{ inputs.copy_job_destination_table }}"
           } else {
             $tenantId = "${{ steps.load-params.outputs.TENANT_ID }}"
             $workspaceName = "${{ steps.load-params.outputs.WORKSPACE_NAME }}"
@@ -143,6 +179,12 @@ jobs:
             $sqlMirrorName = "${{ steps.load-params.outputs.SQL_MIRROR_NAME }}"
             $sqlServer = "${{ steps.load-params.outputs.SQL_SERVER }}"
             $sqlDatabase = "${{ steps.load-params.outputs.SQL_DATABASE }}"
+            $copyJobName = "${{ steps.load-params.outputs.COPY_JOB_NAME }}"
+            $copyJobSourceServer = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_SERVER }}"
+            $copyJobSourceDatabase = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_DATABASE }}"
+            $copyJobSourceTable = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_TABLE }}"
+            $copyJobDestLakehouse = "${{ steps.load-params.outputs.COPY_JOB_DEST_LAKEHOUSE }}"
+            $copyJobDestTable = "${{ steps.load-params.outputs.COPY_JOB_DEST_TABLE }}"
           }
 
           # Build deployment command
@@ -159,6 +201,12 @@ jobs:
           if ($sqlServer) { $params.SqlServerName = $sqlServer }
           if ($sqlDatabase) { $params.SqlDatabaseName = $sqlDatabase }
           if ($env:SQL_CONNECTION_STRING) { $params.SqlConnectionString = $env:SQL_CONNECTION_STRING }
+          if ($copyJobName) { $params.CopyJobName = $copyJobName }
+          if ($copyJobSourceServer) { $params.CopyJobSourceServer = $copyJobSourceServer }
+          if ($copyJobSourceDatabase) { $params.CopyJobSourceDatabase = $copyJobSourceDatabase }
+          if ($copyJobSourceTable) { $params.CopyJobSourceTable = $copyJobSourceTable }
+          if ($copyJobDestLakehouse) { $params.CopyJobDestinationLakehouse = $copyJobDestLakehouse }
+          if ($copyJobDestTable) { $params.CopyJobDestinationTable = $copyJobDestTable }
 
           # Execute deployment script
           ./scripts/Deploy-FabricAssets.ps1 @params

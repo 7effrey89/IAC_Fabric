@@ -221,6 +221,52 @@ Setup for migrating data from Azure SQL to Fabric.
 
 ---
 
+### 7. Copy Job Example
+**File:** `copy-job-example.json`
+
+Creates a workspace with lakehouse and a copy job (data pipeline) to load data from Azure SQL Server.
+
+```json
+{
+  "tenantId": "12345678-1234-1234-1234-123456789abc",
+  "workspaceName": "DataIngestion-Workspace",
+  "workspaceDescription": "Workspace for data ingestion from SQL Server to Lakehouse",
+  "adminUserEmail": "data-engineer@example.com",
+  "lakehouseName": "IngestionLakehouse",
+  "dataAgentName": "",
+  "sqlMirror": {
+    "name": "",
+    "serverName": "",
+    "databaseName": "",
+    "connectionString": ""
+  },
+  "copyJob": {
+    "name": "CustomerDataCopyJob",
+    "sourceServer": "sqlserver.database.windows.net",
+    "sourceDatabase": "SalesDB",
+    "sourceTable": "Customers",
+    "destinationLakehouse": "IngestionLakehouse",
+    "destinationTable": "Customers"
+  }
+}
+```
+
+**What it creates:**
+- ✅ Fabric Workspace
+- ✅ Admin user access
+- ✅ Lakehouse
+- ✅ Copy Job (Data Pipeline) that copies data from Azure SQL to Lakehouse
+
+**Use case:**
+- Data ingestion from Azure SQL Server
+- ETL/ELT pipelines
+- Regular data synchronization
+- One-time or scheduled data loads
+
+**Note:** The copy job uses the `SQL_CONNECTION_STRING` GitHub Secret for authentication to the source SQL Server.
+
+---
+
 ## How to Use These Examples
 
 ### Method 1: Copy to your config file

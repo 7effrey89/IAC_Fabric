@@ -10,5 +10,13 @@
     "serverName": "",
     "databaseName": "",
     "connectionString": ""
+  },
+  "copyJob": {
+    "name": "",
+    "sourceServer": "",
+    "sourceDatabase": "",
+    "sourceTable": "",
+    "destinationLakehouse": "",
+    "destinationTable": ""
   }
 }

@@ -17,6 +17,7 @@ This repository provides Infrastructure as Code (IaC) solutions for deploying Mi
 - 🏠 Lakehouse creation and configuration
 - 🔌 Data Agent (Gateway) setup support
 - 🔄 Azure SQL Database Mirroring
+- 📋 Copy Job (Data Pipeline) from Azure SQL to Lakehouse
 - ⚙️ Easy-to-modify configuration via JSON parameters
 - 🔐 Secure credential management with GitHub Secrets
 
@@ -126,6 +127,21 @@ Edit `config/parameters.json` with your desired settings:
 | `sqlMirror.connectionString` | Conditional* | SQL connection string (store in secrets) | Stored in GitHub secrets |
 
 *Required if creating a SQL mirror
+
+### Copy Job Parameters
+
+| Parameter | Required | Description | Example |
+|-----------|----------|-------------|---------|
+| `copyJob.name` | No | Name of the copy job (data pipeline) | `SQLToCopyJob` |
+| `copyJob.sourceServer` | Conditional** | Azure SQL server name (source) | `myserver.database.windows.net` |
+| `copyJob.sourceDatabase` | Conditional** | Source database name | `MyDatabase` |
+| `copyJob.sourceTable` | Conditional** | Source table name | `Customers` |
+| `copyJob.destinationLakehouse` | Conditional** | Destination lakehouse name | `MyLakehouse` |
+| `copyJob.destinationTable` | Conditional** | Destination table name | `Customers` |
+
+**Required if creating a copy job. The copy job loads data from Azure SQL Server to a Fabric Lakehouse.
+
+**Note**: Connection string for copy job uses the same `SQL_CONNECTION_STRING` secret as SQL Mirror.
 
 ## PowerShell Script Usage
 

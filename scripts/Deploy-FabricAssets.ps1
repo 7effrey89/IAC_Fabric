@@ -1,10 +1,10 @@
 <#
 .SYNOPSIS
-    Deploy Microsoft Fabric assets including Workspace, Lakehouse, Data Agent, and Azure SQL DB Mirror.
+    Deploy Microsoft Fabric assets including Workspace, Lakehouse, Data Agent, Azure SQL DB Mirror, and Copy Job.
 
 .DESCRIPTION
     This script automates the deployment of Microsoft Fabric assets using the Fabric REST API.
-    It can create a workspace, add optional admin users, create a lakehouse, data agent, and Azure SQL DB mirror.
+    It can create a workspace, add optional admin users, create a lakehouse, data agent, Azure SQL DB mirror, and copy jobs.
 
 .PARAMETER TenantId
     Azure AD Tenant ID
@@ -36,8 +36,29 @@
 .PARAMETER SqlConnectionString
     Connection string for Azure SQL Database (required if creating SQL mirror)
 
+.PARAMETER CopyJobName
+    Name of the Copy Job (Data Pipeline) to create (optional)
+
+.PARAMETER CopyJobSourceServer
+    Azure SQL Server name for the copy job source (required if creating copy job)
+
+.PARAMETER CopyJobSourceDatabase
+    Database name for the copy job source (required if creating copy job)
+
+.PARAMETER CopyJobSourceTable
+    Table name to copy from Azure SQL (required if creating copy job)
+
+.PARAMETER CopyJobDestinationLakehouse
+    Destination lakehouse name for the copy job (required if creating copy job)
+
+.PARAMETER CopyJobDestinationTable
+    Destination table name in the lakehouse (required if creating copy job)
+
 .EXAMPLE
     ./Deploy-FabricAssets.ps1 -TenantId "xxx" -WorkspaceName "MyWorkspace" -LakehouseName "MyLakehouse"
+
+.EXAMPLE
+    ./Deploy-FabricAssets.ps1 -TenantId "xxx" -WorkspaceName "MyWorkspace" -LakehouseName "MyLakehouse" -CopyJobName "SQLToCopyJob" -CopyJobSourceServer "server.database.windows.net" -CopyJobSourceDatabase "MyDB" -CopyJobSourceTable "Customers" -CopyJobDestinationLakehouse "MyLakehouse" -CopyJobDestinationTable "Customers"
 #>
 
 [CmdletBinding()]
@@ -70,7 +91,25 @@ param (
     [string]$SqlDatabaseName = "",
 
     [Parameter(Mandatory = $false)]
-    [string]$SqlConnectionString = ""
+    [string]$SqlConnectionString = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobName = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobSourceServer = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobSourceDatabase = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobSourceTable = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobDestinationLakehouse = "",
+
+    [Parameter(Mandatory = $false)]
+    [string]$CopyJobDestinationTable = ""
 )
 
 # Set error action preference
@@ -290,6 +329,123 @@ function New-FabricSqlMirror {
     }
 }
 
+# Function to create copy job (data pipeline) from Azure SQL to Lakehouse
+function New-FabricCopyJob {
+    param (
+        [string]$WorkspaceId,
+        [string]$Name,
+        [string]$SourceServer,
+        [string]$SourceDatabase,
+        [string]$SourceTable,
+        [string]$DestinationLakehouse,
+        [string]$DestinationTable,
+        [string]$ConnectionString,
+        [string]$AccessToken
+    )
+
+    Write-Host "Creating Copy Job (Data Pipeline): $Name"
+
+    $headers = @{
+        "Authorization" = "Bearer $AccessToken"
+        "Content-Type"  = "application/json"
+    }
+
+    # Create a data pipeline with copy activity
+    # The pipeline definition includes source (Azure SQL) and sink (Lakehouse)
+    $pipelineDefinition = @{
+        name = $Name
+        properties = @{
+            activities = @(
+                @{
+                    name = "CopyFromSQLToLakehouse"
+                    type = "Copy"
+                    inputs = @(
+                        @{
+                            referenceName = "AzureSqlSource"
+                            type = "DatasetReference"
+                        }
+                    )
+                    outputs = @(
+                        @{
+                            referenceName = "LakehouseDestination"
+                            type = "DatasetReference"
+                        }
+                    )
+                    typeProperties = @{
+                        source = @{
+                            type = "AzureSqlSource"
+                            sqlReaderQuery = "SELECT * FROM [$SourceTable]"
+                        }
+                        sink = @{
+                            type = "LakehouseTableSink"
+                            tableName = $DestinationTable
+                        }
+                        enableStaging = $false
+                    }
+                }
+            )
+            parameters = @{}
+        }
+        datasets = @{
+            AzureSqlSource = @{
+                type = "AzureSqlTable"
+                linkedServiceName = @{
+                    referenceName = "AzureSqlDatabase"
+                    type = "LinkedServiceReference"
+                }
+                typeProperties = @{
+                    tableName = $SourceTable
+                }
+            }
+            LakehouseDestination = @{
+                type = "LakehouseTable"
+                typeProperties = @{
+                    lakehouse = $DestinationLakehouse
+                    table = $DestinationTable
+                }
+            }
+        }
+        linkedServices = @{
+            AzureSqlDatabase = @{
+                type = "AzureSqlDatabase"
+                typeProperties = @{
+                    connectionString = $ConnectionString
+                }
+            }
+        }
+    } | ConvertTo-Json -Depth 20
+    
+    # Encode to base64 as required by InlineBase64 payload type
+    $base64Payload = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($pipelineDefinition))
+
+    $body = @{
+        displayName = $Name
+        type        = "DataPipeline"
+        definition  = @{
+            parts = @(
+                @{
+                    path        = "pipeline-content.json"
+                    payload     = $base64Payload
+                    payloadType = "InlineBase64"
+                }
+            )
+        }
+    }
+
+    $uri = "$fabricApiBaseUrl/workspaces/$WorkspaceId/items"
+    
+    try {
+        $response = Invoke-RestMethod -Uri $uri -Method Post -Headers $headers -Body ($body | ConvertTo-Json -Depth 10)
+        Write-Host "Copy Job (Data Pipeline) created successfully. ID: $($response.id)"
+        Write-Host "Pipeline: Copy data from $SourceServer.$SourceDatabase.$SourceTable to Lakehouse $DestinationLakehouse.$DestinationTable"
+        return $response
+    }
+    catch {
+        Write-Warning "Failed to create Copy Job: $_"
+        Write-Warning "Ensure the source SQL server is accessible and destination lakehouse exists."
+    }
+}
+
 # Main execution
 try {
     Write-Host "======================================"
@@ -339,6 +495,20 @@ try {
             New-FabricSqlMirror -WorkspaceId $workspaceId -Name $SqlMirrorName `
                 -ServerName $SqlServerName -DatabaseName $SqlDatabaseName `
                 -ConnectionString $SqlConnectionString -AccessToken $accessToken
+        }
+    }
+
+    # Create copy job if specified
+    if ($CopyJobName -and $CopyJobSourceServer -and $CopyJobSourceDatabase -and $CopyJobSourceTable -and $CopyJobDestinationLakehouse -and $CopyJobDestinationTable) {
+        if (-not $SqlConnectionString) {
+            Write-Warning "SQL Connection String not provided. Skipping Copy Job creation."
+        }
+        else {
+            New-FabricCopyJob -WorkspaceId $workspaceId -Name $CopyJobName `
+                -SourceServer $CopyJobSourceServer -SourceDatabase $CopyJobSourceDatabase `
+                -SourceTable $CopyJobSourceTable -DestinationLakehouse $CopyJobDestinationLakehouse `
+                -DestinationTable $CopyJobDestinationTable -ConnectionString $SqlConnectionString `
+                -AccessToken $accessToken
         }
     }
 
