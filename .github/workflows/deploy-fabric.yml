@@ -1,0 +1,243 @@
+name: Deploy Microsoft Fabric Assets
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant_id:
+        description: 'Azure AD Tenant ID'
+        required: true
+        type: string
+      workspace_name:
+        description: 'Fabric Workspace Name'
+        required: true
+        type: string
+      workspace_description:
+        description: 'Workspace Description'
+        required: false
+        type: string
+        default: 'Workspace created via GitHub Actions'
+      admin_user_email:
+        description: 'Optional Admin User Email'
+        required: false
+        type: string
+      lakehouse_name:
+        description: 'Lakehouse Name (optional)'
+        required: false
+        type: string
+      data_agent_name:
+        description: 'Data Agent Name (optional)'
+        required: false
+        type: string
+      sql_mirror_name:
+        description: 'SQL Mirror Name (optional)'
+        required: false
+        type: string
+      sql_server_name:
+        description: 'SQL Server Name (optional)'
+        required: false
+        type: string
+      sql_database_name:
+        description: 'SQL Database Name (optional)'
+        required: false
+        type: string
+      copy_job_name:
+        description: 'Copy Job Name (optional)'
+        required: false
+        type: string
+      copy_job_source_server:
+        description: 'Copy Job Source Server (optional)'
+        required: false
+        type: string
+      copy_job_source_database:
+        description: 'Copy Job Source Database (optional)'
+        required: false
+        type: string
+      copy_job_source_table:
+        description: 'Copy Job Source Table (optional)'
+        required: false
+        type: string
+      copy_job_destination_lakehouse:
+        description: 'Copy Job Destination Lakehouse (optional)'
+        required: false
+        type: string
+      copy_job_destination_table:
+        description: 'Copy Job Destination Table (optional)'
+        required: false
+        type: string
+  push:
+    branches:
+      - main
+    paths:
+      - 'config/parameters.json'
+
+env:
+  AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  AZURE_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+jobs:
+  deploy-fabric-assets:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install PowerShell
+        shell: bash
+        run: |
+          # Update package lists
+          sudo apt-get update
+          # Install PowerShell
+          sudo apt-get install -y wget apt-transport-https software-properties-common
+          wget -q "https://packages.microsoft.com/config/ubuntu/$(lsb_release -rs)/packages-microsoft-prod.deb"
+          sudo dpkg -i packages-microsoft-prod.deb
+          sudo apt-get update
+          sudo apt-get install -y powershell
+
+      - name: Install Azure PowerShell modules
+        shell: pwsh
+        run: |
+          Write-Host "Installing Azure PowerShell modules..."
+          Install-Module -Name Az.Accounts -Force -AllowClobber -Scope CurrentUser
+          Install-Module -Name Az.Resources -Force -AllowClobber -Scope CurrentUser
+
+      - name: Azure Login (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Load parameters from config file
+        id: load-params
+        if: github.event_name == 'push'
+        shell: pwsh
+        run: |
+          # Validate config file exists
+          if (-not (Test-Path ./config/parameters.json)) {
+            Write-Error "Configuration file not found: ./config/parameters.json"
+            exit 1
+          }
+          
+          try {
+            $config = Get-Content -Path ./config/parameters.json | ConvertFrom-Json
+          }
+          catch {
+            Write-Error "Failed to parse configuration file: $_"
+            exit 1
+          }
+          
+          echo "TENANT_ID=$($config.tenantId)" >> $env:GITHUB_OUTPUT
+          echo "WORKSPACE_NAME=$($config.workspaceName)" >> $env:GITHUB_OUTPUT
+          echo "WORKSPACE_DESC=$($config.workspaceDescription)" >> $env:GITHUB_OUTPUT
+          echo "ADMIN_EMAIL=$($config.adminUserEmail)" >> $env:GITHUB_OUTPUT
+          echo "LAKEHOUSE_NAME=$($config.lakehouseName)" >> $env:GITHUB_OUTPUT
+          echo "DATA_AGENT_NAME=$($config.dataAgentName)" >> $env:GITHUB_OUTPUT
+          echo "SQL_MIRROR_NAME=$($config.sqlMirror.name)" >> $env:GITHUB_OUTPUT
+          echo "SQL_SERVER=$($config.sqlMirror.serverName)" >> $env:GITHUB_OUTPUT
+          echo "SQL_DATABASE=$($config.sqlMirror.databaseName)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_NAME=$($config.copyJob.name)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_SERVER=$($config.copyJob.sourceServer)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_DATABASE=$($config.copyJob.sourceDatabase)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_SCHEMA=$($config.copyJob.sourceSchema)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SOURCE_TABLES=$($config.copyJob.sourceTables -join ',')" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_DEST_LAKEHOUSE=$($config.copyJob.destinationLakehouse)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_INCREMENTAL_COL=$($config.copyJob.incrementalColumn)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SP_TENANT=$($config.copyJob.servicePrincipal.tenant)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SP_CLIENT=$($config.copyJob.servicePrincipal.clientId)" >> $env:GITHUB_OUTPUT
+          echo "COPY_JOB_SCHEDULE_HOURS=$($config.copyJob.scheduleIntervalHours)" >> $env:GITHUB_OUTPUT
+
+      - name: Deploy Fabric Assets
+        shell: pwsh
+        env:
+          SQL_CONNECTION_STRING: ${{ secrets.SQL_CONNECTION_STRING }}
+          COPY_JOB_SP_SECRET: ${{ secrets.COPY_JOB_SP_SECRET }}
+        run: |
+          # Determine parameter source (workflow_dispatch or config file)
+          if ("${{ github.event_name }}" -eq "workflow_dispatch") {
+            $tenantId = "${{ inputs.tenant_id }}"
+            $workspaceName = "${{ inputs.workspace_name }}"
+            $workspaceDesc = "${{ inputs.workspace_description }}"
+            $adminEmail = "${{ inputs.admin_user_email }}"
+            $lakehouseName = "${{ inputs.lakehouse_name }}"
+            $dataAgentName = "${{ inputs.data_agent_name }}"
+            $sqlMirrorName = "${{ inputs.sql_mirror_name }}"
+            $sqlServer = "${{ inputs.sql_server_name }}"
+            $sqlDatabase = "${{ inputs.sql_database_name }}"
+            $copyJobName = "${{ inputs.copy_job_name }}"
+            $copyJobSourceServer = "${{ inputs.copy_job_source_server }}"
+            $copyJobSourceDatabase = "${{ inputs.copy_job_source_database }}"
+            $copyJobSourceSchema = ""
+            $copyJobSourceTables = @()
+            $copyJobDestLakehouse = "${{ inputs.copy_job_destination_lakehouse }}"
+            $copyJobIncrementalCol = ""
+            $copyJobSpTenant = ""
+            $copyJobSpClient = ""
+            $copyJobScheduleHours = 24
+          } else {
+            $tenantId = "${{ steps.load-params.outputs.TENANT_ID }}"
+            $workspaceName = "${{ steps.load-params.outputs.WORKSPACE_NAME }}"
+            $workspaceDesc = "${{ steps.load-params.outputs.WORKSPACE_DESC }}"
+            $adminEmail = "${{ steps.load-params.outputs.ADMIN_EMAIL }}"
+            $lakehouseName = "${{ steps.load-params.outputs.LAKEHOUSE_NAME }}"
+            $dataAgentName = "${{ steps.load-params.outputs.DATA_AGENT_NAME }}"
+            $sqlMirrorName = "${{ steps.load-params.outputs.SQL_MIRROR_NAME }}"
+            $sqlServer = "${{ steps.load-params.outputs.SQL_SERVER }}"
+            $sqlDatabase = "${{ steps.load-params.outputs.SQL_DATABASE }}"
+            $copyJobName = "${{ steps.load-params.outputs.COPY_JOB_NAME }}"
+            $copyJobSourceServer = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_SERVER }}"
+            $copyJobSourceDatabase = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_DATABASE }}"
+            $copyJobSourceSchema = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_SCHEMA }}"
+            $copyJobSourceTablesStr = "${{ steps.load-params.outputs.COPY_JOB_SOURCE_TABLES }}"
+            $copyJobSourceTables = if ($copyJobSourceTablesStr) { $copyJobSourceTablesStr -split ',' } else { @() }
+            $copyJobDestLakehouse = "${{ steps.load-params.outputs.COPY_JOB_DEST_LAKEHOUSE }}"
+            $copyJobIncrementalCol = "${{ steps.load-params.outputs.COPY_JOB_INCREMENTAL_COL }}"
+            $copyJobSpTenant = "${{ steps.load-params.outputs.COPY_JOB_SP_TENANT }}"
+            $copyJobSpClient = "${{ steps.load-params.outputs.COPY_JOB_SP_CLIENT }}"
+            $copyJobScheduleHours = "${{ steps.load-params.outputs.COPY_JOB_SCHEDULE_HOURS }}"
+          }
+
+          # Build deployment command
+          $params = @{
+            TenantId = $tenantId
+            WorkspaceName = $workspaceName
+          }
+
+          if ($workspaceDesc) { $params.WorkspaceDescription = $workspaceDesc }
+          if ($adminEmail) { $params.AdminUserEmail = $adminEmail }
+          if ($lakehouseName) { $params.LakehouseName = $lakehouseName }
+          if ($dataAgentName) { $params.DataAgentName = $dataAgentName }
+          if ($sqlMirrorName) { $params.SqlMirrorName = $sqlMirrorName }
+          if ($sqlServer) { $params.SqlServerName = $sqlServer }
+          if ($sqlDatabase) { $params.SqlDatabaseName = $sqlDatabase }
+          if ($env:SQL_CONNECTION_STRING) { $params.SqlConnectionString = $env:SQL_CONNECTION_STRING }
+          if ($copyJobName) { $params.CopyJobName = $copyJobName }
+          if ($copyJobSourceServer) { $params.CopyJobSourceServer = $copyJobSourceServer }
+          if ($copyJobSourceDatabase) { $params.CopyJobSourceDatabase = $copyJobSourceDatabase }
+          if ($copyJobSourceSchema) { $params.CopyJobSourceSchema = $copyJobSourceSchema }
+          if ($copyJobSourceTables.Count -gt 0) { $params.CopyJobSourceTables = $copyJobSourceTables }
+          if ($copyJobDestLakehouse) { $params.CopyJobDestinationLakehouse = $copyJobDestLakehouse }
+          if ($copyJobIncrementalCol) { $params.CopyJobIncrementalColumn = $copyJobIncrementalCol }
+          if ($copyJobSpTenant) { $params.CopyJobServicePrincipalTenant = $copyJobSpTenant }
+          if ($copyJobSpClient) { $params.CopyJobServicePrincipalClientId = $copyJobSpClient }
+          if ($env:COPY_JOB_SP_SECRET) { $params.CopyJobServicePrincipalSecret = $env:COPY_JOB_SP_SECRET }
+          if ($copyJobScheduleHours) { $params.CopyJobScheduleIntervalHours = [int]$copyJobScheduleHours }
+
+          # Execute deployment script
+          ./scripts/Deploy-FabricAssets.ps1 @params
+
+      - name: Deployment Summary
+        if: always()
+        shell: pwsh
+        run: |
+          Write-Host "======================================"
+          Write-Host "Deployment Summary"
+          Write-Host "======================================"
+          Write-Host "Workspace: ${{ github.event_name == 'workflow_dispatch' && inputs.workspace_name || steps.load-params.outputs.WORKSPACE_NAME }}"
+          Write-Host "Trigger: ${{ github.event_name }}"
+          Write-Host "Status: ${{ job.status }}"
+          Write-Host "======================================"

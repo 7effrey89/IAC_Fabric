@@ -1,0 +1,14 @@
+{
+  "tenantId": "12345678-1234-1234-1234-123456789abc",
+  "workspaceName": "Analytics-Workspace",
+  "workspaceDescription": "Analytics workspace with lakehouse",
+  "adminUserEmail": "data-engineer@example.com",
+  "lakehouseName": "AnalyticsLakehouse",
+  "dataAgentName": "",
+  "sqlMirror": {
+    "name": "",
+    "serverName": "",
+    "databaseName": "",
+    "connectionString": ""
+  }
+}

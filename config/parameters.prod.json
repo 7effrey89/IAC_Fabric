@@ -1,0 +1,32 @@
+{
+  "tenantId": "YOUR_PROD_TENANT_ID",
+  "workspaceName": "Prod-Fabric-Workspace",
+  "workspaceDescription": "Production workspace",
+  "adminUserEmail": "prod-admin@example.com",
+  "lakehouseName": "ProdLakehouse",
+  "dataAgentName": "ProdDataAgent",
+  "sqlMirror": {
+    "name": "ProdSQLMirror",
+    "serverName": "prod-server.database.windows.net",
+    "databaseName": "ProdDB",
+    "connectionString": ""
+  },
+  "copyJob": {
+    "name": "ProdCopyJob",
+    "sourceServer": "prod-server.database.windows.net",
+    "sourceDatabase": "ProdDB",
+    "sourceSchema": "dbo",
+    "sourceTables": [
+      "Transactions",
+      "Orders"
+    ],
+    "destinationLakehouse": "ProdLakehouse",
+    "incrementalColumn": "ModifiedDate",
+    "servicePrincipal": {
+      "tenant": "",
+      "clientId": "",
+      "secret": ""
+    },
+    "scheduleIntervalHours": 24
+  }
+}

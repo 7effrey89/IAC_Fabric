@@ -1,0 +1,33 @@
+{
+  "tenantId": "12345678-1234-1234-1234-123456789abc",
+  "workspaceName": "Production-Fabric-Workspace",
+  "workspaceDescription": "Production workspace for data analytics",
+  "adminUserEmail": "admin@example.com",
+  "lakehouseName": "ProductionLakehouse",
+  "dataAgentName": "ProductionDataAgent",
+  "sqlMirror": {
+    "name": "ProductionSQLMirror",
+    "serverName": "myserver.database.windows.net",
+    "databaseName": "ProductionDB",
+    "connectionString": "Server=myserver.database.windows.net;Database=ProductionDB;User Id=xxx;Password=xxx;"
+  },
+  "copyJob": {
+    "name": "SQLToLakehouseCopy",
+    "sourceServer": "myserver.database.windows.net",
+    "sourceDatabase": "ProductionDB",
+    "sourceSchema": "dbo",
+    "sourceTables": [
+      "Sales",
+      "Customers",
+      "Products"
+    ],
+    "destinationLakehouse": "ProductionLakehouse",
+    "incrementalColumn": "ModifiedDate",
+    "servicePrincipal": {
+      "tenant": "",
+      "clientId": "",
+      "secret": ""
+    },
+    "scheduleIntervalHours": 24
+  }
+}
